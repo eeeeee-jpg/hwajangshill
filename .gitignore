@@ -1,0 +1,4 @@
+.env
+data/raw/전국*
+__pycache__/
+.venv/
