@@ -1,7 +1,7 @@
 """아바타 미션: 필터를 고르고 목록에서 화장실을 선택하면 미션 완료.
 
-진행 중에는 배경이 빨간색으로 깜빡이고 캐릭터가 화면을 뛰어다닌다.
-완료되면 배경이 흰색으로 바뀌고 캐릭터는 제자리에서 웃는다.
+진행 중에는 캐릭터가 화면을 뛰어다니고, 완료되면 제자리에서 웃는다.
+(빨간 배경 알람은 #23에서 뺐다: 화면을 차분하게)
 시안: design/mission-prototype.html
 """
 import base64
@@ -22,32 +22,11 @@ CURSOR = (
     "stroke-linecap='round'/%3E%3C/svg%3E\") 15 3, auto"
 )
 
-# 페이지 공통: 커서, 테두리 있는 카드는 흰 배경 유지(빨간 배경 위에서도 내용이 읽히게)
+# 페이지 공통: 커서 (배경은 테마 색 그대로)
 BASE_CSS = f"""
 <style>
 .stApp, .stApp * {{ cursor: {CURSOR} !important; }}
 [data-testid="stHeader"] {{ background: transparent; }}
-.stApp [data-testid="stLayoutWrapper"] > [data-testid="stVerticalBlock"] {{ background: #FFFFFF; }}
-</style>
-"""
-
-# 미션 진행 중: 흰색 ↔ 빨강을 1.6초 주기로 (초당 3회 미만)
-ALARM_CSS = """
-<style>
-.stApp { animation: tm-alarm 1.6s ease-in-out infinite; }
-@keyframes tm-alarm {
-  0%, 100% { background-color: #FFFFFF; }
-  50% { background-color: #FF4F5E; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .stApp { animation: none; background-color: #FFD6DA; }
-}
-</style>
-"""
-
-DONE_CSS = """
-<style>
-.stApp { background-color: #FFFFFF; transition: background-color .6s ease; }
 </style>
 """
 
@@ -245,4 +224,4 @@ def render(slot, filter_changed, selected):
         f'<div class="tm-flip"><img src="{HAPPY_SRC if done else RUN_SRC}" '
         'alt="거꾸로 쓴 야구모자와 멜빵바지 차림의 어린이 캐릭터"></div></div>'
     )
-    st.html(BASE_CSS + (DONE_CSS if done else ALARM_CSS))
+    st.html(BASE_CSS)
