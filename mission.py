@@ -228,13 +228,15 @@ def _panel_html(filter_changed, selected):
 
 
 def render(slot, filter_changed, selected):
-    """미션 패널을 slot에 그리고, 캐릭터와 배경 CSS를 페이지에 넣는다.
+    """미션 패널을 slot에 그리고(slot이 None이면 생략), 캐릭터와 배경 CSS를 페이지에 넣는다.
 
     filter_changed: 필터가 하나라도 기본값에서 바뀌었는지
     selected: 목록에서 고른 행(pd.Series) 또는 None
     """
     done = filter_changed and selected is not None
-    slot.html(CHARACTER_CSS + _panel_html(filter_changed, selected))
+    st.html(CHARACTER_CSS)
+    if slot is not None:  # None이면 체크리스트 패널 없이 캐릭터·배경만
+        slot.html(_panel_html(filter_changed, selected))
 
     bubble = "찾았다!" if done else "화장실 어디야?!"
     st.html(
