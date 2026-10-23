@@ -2,8 +2,16 @@
 
 정제 CSV(data/toilets_clean.csv)만 읽는다. API는 호출하지 않는다.
 """
+import os
+
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
+from dotenv import load_dotenv
+
+from map_view import kakao_map_html
+
+load_dotenv()
 
 CSV_PATH = "data/toilets_clean.csv"
 MAP_LIMIT = 200
@@ -53,11 +61,14 @@ else:
     col2.metric("24시간 개방", f"{(df_f['개방구분'] == '24시간').sum():,}곳")
     col3.metric("장애인용 비율", f"{df_f['장애인용'].mean():.0%}")
 
-    # 지도: 카카오 지도(map_view.py)가 오면 이 자리에 연결한다
     df_map = df_f.head(MAP_LIMIT)
     with st.container(border=True):
         st.subheader("지도")
-        st.info(f"카카오 지도가 들어올 자리입니다. (마커 {len(df_map)}곳)")
+        js_key = os.getenv("KAKAO_JS_KEY") or st.secrets.get("KAKAO_JS_KEY")
+        if js_key:
+            components.html(kakao_map_html(js_key, df_map), height=520)
+        else:
+            st.warning("KAKAO_JS_KEY가 없어 지도를 표시할 수 없습니다.")
     if len(df_f) > MAP_LIMIT:
         st.caption(f"전체 {len(df_f):,}곳 중 {MAP_LIMIT}곳만 지도에 표시합니다.")
 
