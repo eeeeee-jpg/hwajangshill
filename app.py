@@ -15,6 +15,7 @@ load_dotenv()
 
 CSV_PATH = "data/toilets_clean.csv"
 MAP_LIMIT = 200
+ALL_DISTRICTS = "전체 구"
 # 원본 '데이터기준일자' 컬럼의 최신값. 포털 표기와 다르면 고친다.
 DATA_DATE = "2020-06-04"
 
@@ -37,17 +38,21 @@ st.markdown("**서울에서 지금 갈 수 있는 화장실은 어디일까?** �
 
 # 필터 (지도 위)
 with st.container(border=True):
-    filter_col1, filter_col2, _ = st.columns([2, 2, 5], vertical_alignment="center")
-    구분 = filter_col1.selectbox(
+    filter_col1, filter_col2, filter_col3, _ = st.columns([2, 2, 2, 3], vertical_alignment="bottom")
+    선택구 = filter_col1.selectbox(
+        "구",
+        [ALL_DISTRICTS, *sorted(df["구"].dropna().unique())],
+    )
+    구분 = filter_col2.selectbox(
         "개방 구분",
         ["전체", "24시간", "시간제한"],
-        format_func=lambda x: f"개방 구분: {x}",
-        label_visibility="collapsed",
     )
-    장애인용만 = filter_col2.checkbox("장애인용만 보기")
+    장애인용만 = filter_col3.checkbox("장애인용만 보기")
 
 # 필터 결과는 df_f 하나로 만들고 metric·지도·표가 모두 이것만 쓴다
 df_f = df.copy()
+if 선택구 != ALL_DISTRICTS:
+    df_f = df_f[df_f["구"] == 선택구]
 if 구분 != "전체":
     df_f = df_f[df_f["개방구분"] == 구분]
 if 장애인용만:
@@ -73,8 +78,12 @@ else:
         st.caption(f"전체 {len(df_f):,}곳 중 {MAP_LIMIT}곳만 지도에 표시합니다.")
 
     st.subheader("목록")
+    # bool 그대로 두면 체크박스로 보여서 선택 가능한 것처럼 느껴지므로 ✔ 문자로 바꿔 표시
+    df_table = df_f[["이름", "주소", "구", "개방시간", "개방구분", "장애인용"]].assign(
+        장애인용=df_f["장애인용"].map({True: "✔", False: ""})
+    )
     st.dataframe(
-        df_f[["이름", "주소", "구", "개방시간", "개방구분", "장애인용"]],
+        df_table,
         hide_index=True,
         width="stretch",
     )
