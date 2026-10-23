@@ -28,8 +28,8 @@ def classify_hours(text):
     # 00:00~24:00 외의 시간 범위가 하나라도 있으면 시간제한
     if re.search(TIME, re.sub(ALL_DAY, "", text)):
         return "시간제한"
-    # 연중무휴는 시간 정보가 없지만 팀 합의로 24시간으로 본다
-    if re.search(rf"24시간|상시|연중무휴|{ALL_DAY}", text):
+    # 연중무휴는 시간 정보가 없지만 팀 합의로 24시간으로 본다. 25시간은 24시간 오타
+    if re.search(rf"2[45]시간|상시|연중무휴|{ALL_DAY}", text):
         return "24시간"
     return "정보없음"
 
