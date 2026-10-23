@@ -67,8 +67,12 @@ else:
         st.caption(f"전체 {len(df_f):,}곳 중 {MAP_LIMIT}곳만 지도에 표시합니다.")
 
     st.subheader("목록")
+    # bool 그대로 두면 체크박스로 보여서 선택 가능한 것처럼 느껴지므로 ✔ 문자로 바꿔 표시
+    df_table = df_f[["이름", "주소", "구", "개방시간", "개방구분", "장애인용"]].assign(
+        장애인용=df_f["장애인용"].map({True: "✔", False: ""})
+    )
     st.dataframe(
-        df_f[["이름", "주소", "구", "개방시간", "개방구분", "장애인용"]],
+        df_table,
         hide_index=True,
         width="stretch",
     )
