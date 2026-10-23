@@ -1,7 +1,7 @@
 """전국공중화장실표준데이터 중 서울 원본 → data/toilets_clean.csv.
 
 실행: python prepare_data.py
-필요: data/raw/서울공중화장실표준데이터.csv, .env의 KAKAO_REST_API_KEY
+필요: data/raw/seoul_toilets.csv, .env의 KAKAO_REST_API_KEY
 """
 import os
 import re
@@ -10,7 +10,7 @@ import pandas as pd
 import requests
 from dotenv import load_dotenv
 
-RAW = "data/raw/서울공중화장실표준데이터.csv"
+RAW = "data/raw/seoul_toilets.csv"
 OUT = "data/toilets_clean.csv"
 SIDO = "서울"
 # 서울 대략 경계. 이 밖의 좌표는 잘못된 값으로 보고 다시 변환한다.
