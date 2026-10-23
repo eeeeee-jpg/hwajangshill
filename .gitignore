@@ -1,0 +1,14 @@
+.env
+
+# 원본: 서울 파일만 커밋
+data/raw/*
+!data/raw/seoul_toilets.csv
+
+__pycache__/
+.venv/
+
+# OS
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
