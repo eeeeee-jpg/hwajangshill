@@ -82,6 +82,10 @@ def main():
     print(f"좌표 변환 실패 {failed.sum()}곳 제외")
     df = df[~failed]
 
+    dup = df.duplicated(["이름", "위도", "경도"])
+    print(f"중복 {dup.sum()}곳 제외")
+    df = df[~dup]
+
     os.makedirs("data", exist_ok=True)
     df.to_csv(OUT, index=False, encoding="utf-8-sig")
     print(f"{OUT} 저장: {len(df)}곳")
