@@ -28,9 +28,9 @@ def classify_hours(text):
     # 00:00~24:00 외의 시간 범위가 하나라도 있으면 시간제한
     if re.search(TIME, re.sub(ALL_DAY, "", text)):
         return "시간제한"
-    if re.search(rf"24시간|상시|{ALL_DAY}", text):
+    # 연중무휴는 시간 정보가 없지만 팀 합의로 24시간으로 본다
+    if re.search(rf"24시간|상시|연중무휴|{ALL_DAY}", text):
         return "24시간"
-    # 연중무휴처럼 시간이 없는 값은 24시간인지 알 수 없다
     return "정보없음"
 
 
@@ -81,6 +81,10 @@ def main():
     failed = ~(df["위도"].between(*LAT_RANGE) & df["경도"].between(*LNG_RANGE))
     print(f"좌표 변환 실패 {failed.sum()}곳 제외")
     df = df[~failed]
+
+    dup = df.duplicated(["이름", "위도", "경도"])
+    print(f"중복 {dup.sum()}곳 제외")
+    df = df[~dup]
 
     os.makedirs("data", exist_ok=True)
     df.to_csv(OUT, index=False, encoding="utf-8-sig")
