@@ -30,7 +30,7 @@ pip install -r requirements.txt
 # 2. 환경 변수 파일 만들기 (.env.example 복사 후 키 입력)
 cp .env.example .env
 
-# 3. [최초 1회] 정제 (서울 원본 data/raw/서울공중화장실표준데이터.csv는 레포에 포함)
+# 3. [최초 1회] 정제 (서울 원본 data/raw/seoul_toilets.csv는 레포에 포함)
 python prepare_data.py
 
 # 4. 앱 실행
@@ -190,7 +190,7 @@ Closes #이슈번호
 - [ ] `.env` 파일이 커밋에 없다
 - [ ] 코드에 키 문자열이 직접 적혀 있지 않다
 - [ ] REST 키가 HTML 문자열에 들어가지 않는다
-- [ ] 전국 원본 파일(`data/raw/전국*`)이 커밋에 없다
+- [ ] `data/raw/`에 `seoul_toilets.csv` 외의 원본 파일이 커밋에 없다
 ```
 
 **리뷰와 머지**
@@ -256,15 +256,20 @@ git push
 | 코드에 키를 직접 쓰지 않는다. `os.getenv()`로 읽는다 | 키 유출 방지 |
 | REST 키는 `prepare_data.py`에서만 사용한다 | REST 키는 서버(Python)용 |
 | `components.html()`에 넣는 HTML에는 JavaScript 키만 쓴다 | HTML은 브라우저에 그대로 노출됨 |
-| 원본은 서울만 잘라 `data/raw/서울공중화장실표준데이터.csv`로 커밋한다. 전국 원본(`data/raw/전국*`)은 커밋하지 않는다 | 대용량 파일 금지 조건 (전국 8MB → 서울 0.5MB) |
+| 원본은 서울만 잘라 `data/raw/seoul_toilets.csv`로 커밋한다. 전국 원본 등 다른 원본은 커밋하지 않는다 | 대용량 파일 금지 조건 (전국 8MB → 서울 0.5MB) |
 
 **.gitignore 필수 항목**
 
 ```
 .env
-data/raw/전국*
+data/raw/*
+!data/raw/seoul_toilets.csv
 __pycache__/
 .venv/
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
 ```
 
 **.env.example** (키 이름만, 값은 비워서 커밋)
@@ -331,7 +336,7 @@ Claude Code로 작업할 때는 아래를 반드시 지킨다.
 - 브랜치·커밋·PR은 이 문서의 4~6번 형식을 따른다.
 - `main` 브랜치에서 직접 작업하지 않는다. 현재 브랜치가 `main`이면 작업을 멈추고 알린다.
 - 키 값을 코드, HTML, 커밋 메시지, PR 본문에 쓰지 않는다. 키는 `os.getenv()`로만 읽는다.
-- `.env`, 전국 원본(`data/raw/전국*`)을 커밋하지 않는다. `git add .` 전에 `git status`로 확인한다.
+- `.env`, `data/raw/seoul_toilets.csv` 외의 원본을 커밋하지 않는다. `git add .` 전에 `git status`로 확인한다.
 - 정제 CSV 컬럼 약속(9번)을 바꾸지 않는다.
 - `git push --force`, `git reset --hard` 등 기록을 지우는 명령은 실행하지 않는다.
 - 새 패키지가 필요하면 `requirements.txt`에 추가하고 PR 본문에 적는다.
