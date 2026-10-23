@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>화장실 찾기 미션</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap">
+<style>
+/* Layout: Streamlit app.py 순서(제목 → 질문 → 미션 바 → 필터 → metric → 지도 → 목록)를 그대로 따른 단일 컬럼 */
+/* 단일 라이트 테마: 실제 앱의 .streamlit/config.toml(base = light)과 맞춘다 */
+:root {
+  color-scheme: light;
+  --primary: #FF52A3;
+  --magenta-80: #FF007F;
+  --magenta-20: #FFF2F9;
+  --accent-blue: #6DA5EF;
+  --alert: #FF4F5E;
+  --muted: #505462;
+  --g800: #222222;
+  --g600: #505462;
+  --g500: #717686;
+  --g400: #9196A8;
+  --g300: #D1D4E0;
+  --g200: #E2E4ED;
+  --g100: #F0F2F9;
+  --g50: #F8F9FD;
+  --white: #FFFFFF;
+  --skin: #FFD9B8;
+  --tee: #FFE066;
+  --denim: #6DA5EF;
+  --denim-dark: #4A82CF;
+  --sweat: #8FD3F4;
+  --font: "Pretendard", "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  /* 똥 모양 커서 (32×32, 끝부분이 클릭 지점) */
+  --cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cg fill='%238B5A2B' stroke='%234A2E14' stroke-width='1.5' stroke-linejoin='round'%3E%3Cellipse cx='16' cy='25.5' rx='13' ry='5'/%3E%3Cellipse cx='16' cy='18.5' rx='10' ry='4.6'/%3E%3Cellipse cx='16' cy='12.5' rx='7' ry='3.8'/%3E%3Cpath d='M15 3c4 2 5 5 2 8h-4c-1-3 3-4 2-8z'/%3E%3C/g%3E%3Ccircle cx='12.5' cy='18' r='2.2' fill='%23fff'/%3E%3Ccircle cx='19.5' cy='18' r='2.2' fill='%23fff'/%3E%3Ccircle cx='12.8' cy='18.3' r='1' fill='%23222'/%3E%3Ccircle cx='19.8' cy='18.3' r='1' fill='%23222'/%3E%3Cpath d='M12.5 24q3.5 2.6 7 0' fill='none' stroke='%234A2E14' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E") 15 3;
+}
+
+/* 페이지 전체에 똥 커서 적용 (클릭 가능한 요소도 포함) */
+html, body, * { cursor: var(--cursor), auto !important; }
+
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--g800);
+  background: var(--white);
+  letter-spacing: -0.005em;
+  transition: background-color .6s ease;
+}
+
+/* 미션 진행 중: 흰색 ↔ 빨강을 1.6초 주기로 천천히 (초당 3회 미만) */
+body.alarm { animation: alarm 1.6s ease-in-out infinite; --muted: var(--g800); }
+@keyframes alarm {
+  0%, 100% { background-color: var(--white); }
+  50% { background-color: var(--alert); }
+}
+body.cleared { background-color: var(--white); }
+
+.page {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 20px;
+}
+
+.proto-flag {
+  justify-self: start;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--g500);
+  background: var(--white);
+  border: 1px solid var(--g200);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.question { margin: 4px 0 0; font-size: 16px; line-height: 1.6; color: var(--muted); }
+.question b { color: var(--g800); }
+
+/* ---------- 미션 바 ---------- */
+.mission {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 28px;
+  background: var(--white);
+  border: 1.5px solid var(--g100);
+  border-radius: var(--r-lg);
+  padding: 16px 20px;
+  transition: border-color .4s ease;
+}
+body.cleared .mission { border-color: var(--primary); }
+
+/* 캐릭터: 화면 전체를 돌아다님 (클릭은 통과) */
+.runner {
+  --w: 96px;
+  --h: 116px;
+  position: fixed;
+  z-index: 50;
+  width: var(--w);
+  height: var(--h);
+  left: 2vw;
+  top: 12vh;
+  pointer-events: none;
+  animation: roam 16s linear infinite;
+}
+@keyframes roam {
+  0%   { left: calc((100vw - var(--w)) * .02); top: calc((100vh - var(--h)) * .12); }
+  20%  { left: calc((100vw - var(--w)) * .96); top: calc((100vh - var(--h)) * .30); }
+  40%  { left: calc((100vw - var(--w)) * .70); top: calc((100vh - var(--h)) * .92); }
+  60%  { left: calc((100vw - var(--w)) * .06); top: calc((100vh - var(--h)) * .70); }
+  80%  { left: calc((100vw - var(--w)) * .45); top: calc((100vh - var(--h)) * .45); }
+  100% { left: calc((100vw - var(--w)) * .02); top: calc((100vh - var(--h)) * .12); }
+}
+/* 오른쪽으로 갈 땐 오른쪽을, 왼쪽으로 갈 땐 왼쪽을 본다 */
+.runner .flip { width: 100%; height: 100%; animation: face 16s steps(1, end) infinite; }
+@keyframes face {
+  0%   { transform: scaleX(1); }
+  20%  { transform: scaleX(-1); }
+  60%  { transform: scaleX(1); }
+  80%  { transform: scaleX(-1); }
+  100% { transform: scaleX(-1); }
+}
+.runner svg { width: 100%; height: 100%; overflow: visible; display: block; }
+
+.bubble {
+  position: absolute;
+  bottom: 112px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--magenta-80);
+  background: var(--white);
+  border: 1px solid var(--g200);
+  border-radius: var(--r-sm);
+  padding: 3px 8px;
+  box-shadow: 2px 2px 2.5px rgba(0,0,0,.12);
+}
+body.cleared .bubble { color: var(--primary); border-color: var(--primary); }
+
+/* 팔·다리·몸 흔들기 (뛰는 동작) */
+.leg-front, .leg-back { transform-origin: 50px 84px; }
+.arm-front, .arm-back { transform-origin: 50px 61px; }
+.body-bob { animation: bob .36s ease-in-out infinite; }
+.leg-front { animation: swing .36s ease-in-out infinite alternate; }
+.leg-back { animation: swing .36s ease-in-out infinite alternate-reverse; }
+.arm-front { animation: arm .36s ease-in-out infinite alternate-reverse; }
+.arm-back { animation: arm .36s ease-in-out infinite alternate; }
+@keyframes swing { from { transform: rotate(-32deg); } to { transform: rotate(32deg); } }
+@keyframes arm { from { transform: rotate(-45deg); } to { transform: rotate(45deg); } }
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+
+.drop { opacity: 0; animation: drip 1s ease-out infinite; }
+.drop.d2 { animation-delay: .33s; }
+.drop.d3 { animation-delay: .66s; }
+@keyframes drip {
+  0% { opacity: 0; transform: translate(0, 0); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-10px, 10px); }
+}
+
+.face-happy { display: none; }
+
+/* 미션 완료: 제자리에서 멈추고 웃는 얼굴, 두 팔 번쩍 */
+body.cleared .runner,
+body.cleared .runner .flip { animation-play-state: paused; }
+body.cleared .leg-front,
+body.cleared .leg-back { animation: none; transform: rotate(0); }
+body.cleared .arm-front { animation: none; transform: rotate(-155deg); }
+body.cleared .arm-back { animation: none; transform: rotate(155deg); }
+body.cleared .body-bob { animation: hop 1.2s ease-in-out infinite; }
+body.cleared .drop { display: none; }
+body.cleared .face-run { display: none; }
+body.cleared .face-happy { display: inline; }
+@keyframes hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-5px); } }
+
+/* 체크리스트 */
+.steps { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; min-width: 0; }
+.steps h2 { margin: 0; font-size: 14px; font-weight: 700; color: var(--g500); }
+.step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--g500);
+}
+.check {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--g300);
+  display: grid;
+  place-items: center;
+  transition: background-color .25s ease;
+}
+.check svg { width: 14px; height: 14px; }
+.step.done { color: var(--g800); font-weight: 700; }
+.step.done .check { background: var(--primary); }
+
+.found {
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--magenta-20);
+  display: grid;
+  gap: 2px;
+}
+.found strong { font-size: 14px; color: var(--g800); }
+.found span { font-size: 12px; color: var(--g500); }
+.reset {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+/* ---------- 필터 ---------- */
+.card {
+  background: var(--white);
+  border: 1px solid var(--g200);
+  border-radius: var(--r-md);
+  padding: 16px;
+}
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+.select {
+  appearance: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--g800);
+  min-width: 200px;
+  height: 40px;
+  padding: 0 36px 0 12px;
+  border: 1px solid var(--g200);
+  border-radius: var(--r-sm);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23717686' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") right 12px center no-repeat,
+    var(--g50);
+  cursor: pointer;
+}
+.toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.toggle input { width: 18px; height: 18px; accent-color: var(--primary); margin: 0; }
+.select:focus-visible, .toggle input:focus-visible, .row:focus-visible, .reset:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* ---------- metric ---------- */
+.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.metric { display: grid; gap: 2px; }
+.metric span { font-size: 14px; color: var(--muted); }
+.metric strong { font-size: clamp(26px, 3.6vw, 36px); font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+/* ---------- 지도 ---------- */
+.map-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+.map-head h3, .list-head { margin: 0; font-size: 18px; font-weight: 700; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--g500); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; border: 1.5px solid var(--white); box-shadow: 0 0 0 1px var(--g200); }
+.map {
+  position: relative;
+  height: 300px;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: #EEF1EC;
+}
+.map svg.ground { position: absolute; inset: 0; width: 100%; height: 100%; }
+.map-note { position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: var(--g500); background: rgba(255,255,255,.85); padding: 2px 6px; border-radius: 4px; }
+.pin {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 50%;
+  border: 2px solid var(--white);
+  box-shadow: 2px 2px 2.5px rgba(0,0,0,.18);
+  transition: transform .2s ease;
+}
+.pin.dis::after {
+  content: "";
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  border: 2px solid var(--white);
+}
+.pin.sel { transform: scale(1.35); z-index: 2; box-shadow: 0 0 0 4px rgba(255,82,163,.25), 2px 2px 2.5px rgba(0,0,0,.18); }
+
+/* ---------- 목록 ---------- */
+.hint { margin: 4px 0 10px; font-size: 13px; color: var(--muted); }
+.table-wrap { overflow-x: auto; border: 1px solid var(--g100); border-radius: var(--r-sm); background: var(--white); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 620px; }
+th { text-align: left; font-weight: 500; color: var(--g600); background: var(--g50); padding: 10px 12px; border-bottom: 1px solid var(--g100); }
+td { padding: 10px 12px; border-bottom: 1px solid var(--g100); }
+tr:last-child td { border-bottom: 0; }
+.row { cursor: pointer; }
+.row:hover td { background: var(--g50); }
+.row.sel td { background: var(--magenta-20); }
+.radio { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--g300); display: inline-block; vertical-align: middle; }
+.row.sel .radio { border: 5px solid var(--primary); }
+.tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
+.tag.t24 { background: var(--magenta-20); color: var(--magenta-80); }
+.tag.tlim { background: var(--g100); color: var(--g600); }
+.tag.tnone { background: var(--g50); color: var(--g400); }
+.empty { padding: 24px; text-align: center; color: var(--g500); }
+
+.source { font-size: 12px; color: var(--muted); }
+
+/* ---------- 구현 메모 ---------- */
+.notes { border-top: 1px dashed var(--g300); padding-top: 20px; display: grid; gap: 10px; }
+.notes h2 { margin: 0; font-size: 16px; }
+.notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; line-height: 1.6; color: var(--g600); max-width: 72ch; }
+.notes code { font-size: 13px; background: var(--g50); border: 1px solid var(--g100); border-radius: 4px; padding: 0 4px; }
+
+@media (max-width: 720px) {
+  .runner { --w: 72px; --h: 87px; }
+  .metrics { grid-template-columns: 1fr; gap: 10px; }
+  .map { height: 240px; }
+}
+
+/* 동작 줄이기: 깜빡임·달리기 끄고 정지 상태로 */
+@media (prefers-reduced-motion: reduce) {
+  body.alarm { animation: none; background-color: #FFD6DA; }
+  .runner, .runner .flip, .body-bob, .leg-front, .leg-back, .arm-front, .arm-back, .drop { animation: none !important; }
+  .runner { left: auto; top: auto; right: 16px; bottom: 16px; }
+  .drop { opacity: 1; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <span class="proto-flag">프로토타입 · 예시 데이터</span>
+
+  <header>
+    <h1>🚻 공중화장실 찾기</h1>
+    <p class="question"><b>서울에서 지금 갈 수 있는 화장실은 어디일까?</b> 조건을 고르면 바로 걸러 보여줍니다.</p>
+  </header>
+
+      <div class="runner" id="runner">
+        <div class="bubble" id="bubble">화장실 어디야?!</div>
+        <div class="flip">
+          <svg viewBox="0 0 100 120" role="img" aria-label="거꾸로 쓴 야구모자와 멜빵바지 차림의 어린이 캐릭터">
+            <g class="body-bob">
+              <!-- 뒤쪽 팔·다리 -->
+              <g class="arm-back">
+                <rect x="46.5" y="60" width="7" height="20" rx="3.5" fill="var(--skin)" stroke="var(--g800)" stroke-width="2"/>
+              </g>
+              <g class="leg-back">
+                <rect x="45.5" y="82" width="9" height="17" rx="3.5" fill="var(--denim-dark)" stroke="var(--g800)" stroke-width="2"/>
+                <rect x="44" y="97" width="15" height="7" rx="3.5" fill="var(--g800)"/>
+              </g>
+              <!-- 몸: 티셔츠 + 멜빵바지 -->
+              <rect x="37" y="55" width="26" height="28" rx="9" fill="var(--tee)" stroke="var(--g800)" stroke-width="2"/>
+              <path d="M40 66 h20 v12 a6 6 0 0 1 -6 6 h-8 a6 6 0 0 1 -6 -6 z" fill="var(--denim)" stroke="var(--g800)" stroke-width="2"/>
+              <path d="M42 56 L43 67 M58 56 L57 67" stroke="var(--denim-dark)" stroke-width="3" stroke-linecap="round"/>
+              <circle cx="43.5" cy="68.5" r="1.8" fill="var(--tee)" stroke="var(--g800)" stroke-width="1"/>
+              <circle cx="56.5" cy="68.5" r="1.8" fill="var(--tee)" stroke="var(--g800)" stroke-width="1"/>
+              <rect x="46" y="72" width="8" height="5" rx="1.5" fill="none" stroke="var(--denim-dark)" stroke-width="1.4"/>
+              <!-- 앞쪽 다리 -->
+              <g class="leg-front">
+                <rect x="45.5" y="82" width="9" height="17" rx="3.5" fill="var(--denim)" stroke="var(--g800)" stroke-width="2"/>
+                <rect x="44" y="97" width="15" height="7" rx="3.5" fill="var(--g800)"/>
+              </g>
+              <!-- 머리 -->
+              <circle cx="52" cy="36" r="17" fill="var(--skin)" stroke="var(--g800)" stroke-width="2"/>
+              <circle cx="42.5" cy="38" r="4" fill="var(--skin)" stroke="var(--g800)" stroke-width="2"/>
+              <path d="M36 39 q2 6 6 8" fill="none" stroke="#6B4A2E" stroke-width="3" stroke-linecap="round"/>
+              <!-- 거꾸로 쓴 야구모자: 챙이 뒤(왼쪽)를 향함 -->
+              <path d="M35 32 A17 17 0 0 1 69 32 Q52 28 35 32 Z" fill="var(--primary)" stroke="var(--g800)" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M37 31 L20 33.5 Q17.5 35.5 21 37 L38 35 Z" fill="var(--magenta-80)" stroke="var(--g800)" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M58 28.6 h6" stroke="var(--white)" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="52" cy="19.5" r="2.2" fill="var(--magenta-80)" stroke="var(--g800)" stroke-width="1.5"/>
+              <!-- 볼 -->
+              <circle cx="66" cy="43" r="2.8" fill="#FFB1DD"/>
+              <!-- 뛰는 얼굴: 걱정 눈썹 + 벌린 입 -->
+              <g class="face-run">
+                <path d="M54 33.5 L59 32 M62.5 32 L67 33.5" stroke="var(--g800)" stroke-width="1.8" stroke-linecap="round"/>
+                <circle cx="57" cy="38" r="1.9" fill="var(--g800)"/>
+                <circle cx="64.5" cy="38" r="1.9" fill="var(--g800)"/>
+                <ellipse cx="61.5" cy="46" rx="2.8" ry="2.4" fill="#8B3A3A"/>
+              </g>
+              <!-- 웃는 얼굴 -->
+              <g class="face-happy">
+                <path d="M54 39 Q57 35 60 39 M62 39 Q65 35 68 39" fill="none" stroke="var(--g800)" stroke-width="1.9" stroke-linecap="round"/>
+                <path d="M56.5 43.5 Q62 51 67.5 43.5 Z" fill="#8B3A3A" stroke="var(--g800)" stroke-width="1.4" stroke-linejoin="round"/>
+              </g>
+              <!-- 땀방울 -->
+              <path class="drop d1" d="M36 22 c2.5 4 3.5 6 0 8 c-3.5 -2 -2.5 -4 0 -8z" fill="var(--sweat)"/>
+              <path class="drop d2" d="M30 30 c2 3.2 2.8 4.8 0 6.4 c-2.8 -1.6 -2 -3.2 0 -6.4z" fill="var(--sweat)"/>
+              <path class="drop d3" d="M72 24 c2 3.2 2.8 4.8 0 6.4 c-2.8 -1.6 -2 -3.2 0 -6.4z" fill="var(--sweat)"/>
+              <!-- 앞쪽 팔 -->
+              <g class="arm-front">
+                <rect x="46.5" y="60" width="7" height="20" rx="3.5" fill="var(--skin)" stroke="var(--g800)" stroke-width="2"/>
+                <rect x="45.5" y="57" width="9" height="7" rx="3" fill="var(--tee)" stroke="var(--g800)" stroke-width="2"/>
+              </g>
+            </g>
+          </svg>
+        </div>
+      </div>
+
+  <section class="mission" aria-label="미션">
+    <div class="steps">
+      <h2>미션</h2>
+      <div class="step" id="step1"><span class="check" aria-hidden="true"><svg viewBox="0 0 14 14"><path d="M3 7.2l2.6 2.6L11 4.4" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>① 조건 고르기</div>
+      <div class="step" id="step2"><span class="check" aria-hidden="true"><svg viewBox="0 0 14 14"><path d="M3 7.2l2.6 2.6L11 4.4" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>② 목록에서 화장실 선택</div>
+      <div class="found" id="found" hidden>
+        <strong id="foundName"></strong>
+        <span id="foundMeta"></span>
+      </div>
+      <button class="reset" id="reset" type="button" hidden>다시 해보기</button>
+    </div>
+  </section>
+
+  <section class="card filters" aria-label="필터">
+    <select class="select" id="kind" aria-label="개방 구분">
+      <option value="전체">개방 구분: 전체</option>
+      <option value="24시간">개방 구분: 24시간</option>
+      <option value="시간제한">개방 구분: 시간제한</option>
+    </select>
+    <label class="toggle" for="dis"><input type="checkbox" id="dis">장애인용만 보기</label>
+  </section>
+
+  <section class="metrics" aria-label="요약">
+    <div class="metric"><span>조건에 맞는 화장실</span><strong id="m1">0곳</strong></div>
+    <div class="metric"><span>24시간 개방</span><strong id="m2">0곳</strong></div>
+    <div class="metric"><span>장애인용 비율</span><strong id="m3">0%</strong></div>
+  </section>
+
+  <section class="card" aria-label="지도">
+    <div class="map-head">
+      <h3>지도</h3>
+      <div class="legend">
+        <span><i style="background:var(--primary)"></i>24시간</span>
+        <span><i style="background:var(--g400)"></i>시간제한</span>
+        <span><i style="background:var(--g300)"></i>정보없음</span>
+        <span><i style="background:var(--accent-blue)"></i>장애인용</span>
+      </div>
+    </div>
+    <div class="map" id="map">
+      <svg class="ground" viewBox="0 0 1000 300" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0 190 C180 160 320 230 520 200 S860 150 1000 175 L1000 225 C860 200 700 255 520 250 S180 210 0 240 Z" fill="#CFE6F5"/>
+        <path d="M0 80 H1000 M0 130 L1000 110 M180 0 L220 300 M460 0 L440 300 M720 0 L760 300" stroke="#FFFFFF" stroke-width="9" fill="none"/>
+        <path d="M60 20 h90 v40 h-90z M600 30 h70 v50 h-70z M820 240 h120 v45 h-120z" fill="#DDE8D5"/>
+      </svg>
+      <div id="pins"></div>
+      <span class="map-note">지도 자리 · 실제 앱은 카카오 지도</span>
+    </div>
+  </section>
+
+  <section aria-label="목록">
+    <h3 class="list-head">목록</h3>
+    <p class="hint">행을 눌러 화장실을 선택하세요.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:40px"></th><th>이름</th><th>주소</th><th>개방시간</th><th>개방구분</th><th>장애인용</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="source">출처: 공공데이터포털 전국공중화장실표준데이터 · 데이터 기준일 2020-06-04 · 이 화면의 화장실 목록은 예시입니다</p>
+
+  <section class="notes">
+    <h2>구현 메모 (C·B 참고)</h2>
+    <ul>
+      <li><b>미션 완료 조건</b>: ① 필터가 기본값(전체, 체크 해제)에서 하나라도 바뀌고 ② 목록에서 한 곳을 선택하면 완료예요. 선택한 곳이 필터로 사라지면 ②가 다시 풀려요.</li>
+      <li><b>선택은 목록에서</b>: 카카오 지도는 <code>components.html</code> iframe이라 마커 클릭을 Python이 받을 수 없어요. <code>st.dataframe(on_select="rerun", selection_mode="single-row")</code>로 판정해요.</li>
+      <li><b>배경 깜빡임</b>: 흰색 ↔ <code>#FF4F5E</code>, 1.6초 주기예요. 카드(필터·지도·목록)는 흰색 그대로이고, 배경 위 회색 글씨는 진행 중에 진한 색으로 바꿔서 빨강 위에서도 읽혀요. 기기에서 "동작 줄이기"를 켜면 깜빡이지 않고 연한 빨강으로 고정돼요.</li>
+      <li><b>캐릭터 이동</b>: 화면 전체(고정 위치)를 16초 동안 다섯 지점을 돌아다니고, 클릭은 통과해요. 완료되면 그 자리에서 멈춰요.</li>
+      <li><b>Streamlit 적용</b>: 캐릭터는 SVG + CSS 애니메이션이라 <code>st.html</code>로 넣을 수 있어요. Streamlit에서는 페이지에 클래스를 붙일 수 없으니, 미션 상태에 따라 <code>.stApp</code> 배경 CSS를 다르게 주입해요.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+// 예시 데이터: 정제 CSV 컬럼(이름·주소·구·개방시간·개방구분·장애인용)과 같은 구조
+const DATA = [
+  { 이름: "서울숲 공원 화장실", 주소: "서울 성동구 뚝섬로 273", 개방시간: "24시간", 개방구분: "24시간", 장애인용: true, x: 62, y: 30 },
+  { 이름: "뚝섬유원지역 화장실", 주소: "서울 광진구 자양동 112", 개방시간: "05:30~24:00", 개방구분: "시간제한", 장애인용: true, x: 74, y: 52 },
+  { 이름: "성수동 카페거리 공중화장실", 주소: "서울 성동구 연무장길 45", 개방시간: "09:00~22:00", 개방구분: "시간제한", 장애인용: false, x: 50, y: 22 },
+  { 이름: "응봉산 입구 화장실", 주소: "서울 성동구 응봉동 271", 개방시간: "상시", 개방구분: "24시간", 장애인용: false, x: 30, y: 26 },
+  { 이름: "한강 잠원지구 화장실", 주소: "서울 서초구 잠원로 221", 개방시간: "24시간", 개방구분: "24시간", 장애인용: true, x: 40, y: 88 },
+  { 이름: "왕십리 광장 화장실", 주소: "서울 성동구 왕십리광장로 17", 개방시간: "", 개방구분: "정보없음", 장애인용: false, x: 16, y: 14 },
+  { 이름: "건대입구역 공원 화장실", 주소: "서울 광진구 능동로 110", 개방시간: "07:00~23:00", 개방구분: "시간제한", 장애인용: true, x: 88, y: 18 },
+  { 이름: "옥수동 근린공원 화장실", 주소: "서울 성동구 옥수동 449", 개방시간: "연중무휴", 개방구분: "24시간", 장애인용: true, x: 20, y: 48 },
+];
+const COLOR = { "24시간": "var(--primary)", "시간제한": "var(--g400)", "정보없음": "var(--g300)" };
+const TAG = { "24시간": "t24", "시간제한": "tlim", "정보없음": "tnone" };
+
+const $ = (id) => document.getElementById(id);
+const state = { kind: "전체", dis: false, selected: null };
+
+function filtered() {
+  return DATA.filter((d) => (state.kind === "전체" || d.개방구분 === state.kind) && (!state.dis || d.장애인용));
+}
+
+function render() {
+  const rows = filtered();
+  if (state.selected && !rows.includes(state.selected)) state.selected = null;
+
+  $("m1").textContent = `${rows.length}곳`;
+  $("m2").textContent = `${rows.filter((d) => d.개방구분 === "24시간").length}곳`;
+  $("m3").textContent = rows.length ? `${Math.round((rows.filter((d) => d.장애인용).length / rows.length) * 100)}%` : "0%";
+
+  $("pins").innerHTML = rows.map((d) =>
+    `<span class="pin${d.장애인용 ? " dis" : ""}${d === state.selected ? " sel" : ""}" style="left:${d.x}%;top:${d.y}%;background:${COLOR[d.개방구분]}" title="${d.이름}"></span>`
+  ).join("");
+
+  const body = $("rows");
+  body.innerHTML = rows.length ? "" : `<tr><td colspan="6" class="empty">조건에 맞는 화장실이 없습니다. 조건을 바꿔 보세요.</td></tr>`;
+  rows.forEach((d) => {
+    const tr = document.createElement("tr");
+    tr.className = "row" + (d === state.selected ? " sel" : "");
+    tr.tabIndex = 0;
+    tr.setAttribute("aria-selected", d === state.selected ? "true" : "false");
+    tr.innerHTML = `<td><span class="radio"></span></td><td>${d.이름}</td><td>${d.주소}</td><td>${d.개방시간 || "-"}</td><td><span class="tag ${TAG[d.개방구분]}">${d.개방구분}</span></td><td>${d.장애인용 ? "있음" : "-"}</td>`;
+    const pick = () => { state.selected = d; render(); };
+    tr.addEventListener("click", pick);
+    tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+    body.appendChild(tr);
+  });
+
+  const s1 = state.kind !== "전체" || state.dis;
+  const s2 = !!state.selected;
+  const cleared = s1 && s2;
+  $("step1").classList.toggle("done", s1);
+  $("step2").classList.toggle("done", s2);
+  document.body.classList.toggle("alarm", !cleared);
+  document.body.classList.toggle("cleared", cleared);
+  $("bubble").textContent = cleared ? "찾았다!" : "화장실 어디야?!";
+  $("found").hidden = !cleared;
+  $("reset").hidden = !cleared;
+  if (cleared) {
+    const d = state.selected;
+    $("foundName").textContent = d.이름;
+    $("foundMeta").textContent = `${d.주소} · ${d.개방시간 || "개방시간 정보없음"}${d.장애인용 ? " · 장애인용 있음" : ""}`;
+  }
+}
+
+$("kind").addEventListener("change", (e) => { state.kind = e.target.value; render(); });
+$("dis").addEventListener("change", (e) => { state.dis = e.target.checked; render(); });
+$("reset").addEventListener("click", () => {
+  state.kind = "전체"; state.dis = false; state.selected = null;
+  $("kind").value = "전체"; $("dis").checked = false;
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
